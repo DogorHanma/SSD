@@ -430,6 +430,18 @@ function buildContext() {
 
 /* ------------------------------------------------------------- publico -- */
 
+function setId(newId) {
+    if (!newId || newId === state.id) return;
+    
+    // Cambiar la identidad del nodo en vivo
+    state.id = newId;
+    config.id = newId;
+    
+    // Forzar una re-eleccion inmediata bajo la nueva identidad
+    ctx.stepDown();
+    ctx.log("id-changed", { newId });
+}
+
 function snapshot() {
     return {
         id: state.id,
@@ -500,6 +512,7 @@ module.exports = {
     stop,
     state,
     snapshot,
+    setId,
     handleMessage,
     handlePing,
     setAlgorithm,

@@ -434,3 +434,35 @@ document.getElementById("connectPeerBtn").addEventListener("click", async () => 
         btn.textContent = "Conectar";
     }
 });
+
+document.getElementById("changeIdBtn").addEventListener("click", async () => {
+    const input = document.getElementById("changeIdInput");
+    const id = input.value.trim().toUpperCase();
+    if (!id) return;
+
+    try {
+        const btn = document.getElementById("changeIdBtn");
+        btn.disabled = true;
+        btn.textContent = "...";
+        
+        const res = await fetch("/election/id", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            input.value = "";
+            refresh();
+        } else {
+            alert(data.error || "Error al cambiar el ID");
+        }
+    } catch (err) {
+        alert("Error de red al intentar cambiar el ID");
+    } finally {
+        const btn = document.getElementById("changeIdBtn");
+        btn.disabled = false;
+        btn.textContent = "Cambiar";
+    }
+});

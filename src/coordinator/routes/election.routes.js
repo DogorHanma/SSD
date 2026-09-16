@@ -65,6 +65,14 @@ router.post("/election/algorithm", (req, res) => {
     res.json({ message: `Algoritmo activo: ${algo}`, state: engine.snapshot() });
 });
 
+router.post("/election/id", (req, res) => {
+    const { id } = req.body;
+    if (!id || typeof id !== "string") return res.status(400).json({ error: "ID requerido" });
+    
+    engine.setId(id);
+    res.json({ message: `ID cambiado a ${id}` });
+});
+
 router.post("/election/trigger", (req, res) => {
     engine.stepDown();
     res.json({ message: "Eleccion forzada", state: engine.snapshot() });
