@@ -2,6 +2,7 @@ const createApp = require("./app");
 const createLogger = require("./utils/logger");
 const pulse = require("./services/pulse.service");
 const messageService = require("./services/message.service");
+const failover = require("./services/failover.service");
 
 const PORT = process.argv[2];
 const NAME = process.argv[3];
@@ -16,12 +17,64 @@ let parent = process.argv[4];
 const log = createLogger(NAME);
 const app = createApp({ port: PORT, name: NAME });
 
+/**
+ * Called when failover successfully connects to a new coordinator.
+ * Updates parent and restarts the pulse.
+ */
+function onConnected(newUrl) {
+    log("INFO", `★ Switched to new coordinator: ${newUrl}`);
+    parent = newUrl;
+    pulse.stopPulse();
+    pulse.startPulse({
+        name: NAME,
+        port: PORT,
+        middlewareUrl: parent,
+        log,
+        onNeedFailover: handleFailover
+    });
+}
+
+/**
+ * Handle failover events from the pulse service.
+ * @param {string} type - "fast" (409 redirect) or "slow" (dead coordinator)
+ * @param {string} urlOrLeader - leader URL (fast) or dead coordinator URL (slow)
+ */
+function handleFailover(type, urlOrLeader) {
+    if (failover.isInProgress()) return;
+
+    if (type === "fast") {
+        // Fast path: we know who the leader is
+        failover.fastFailover({
+            leaderUrl: urlOrLeader,
+            name: NAME,
+            port: PORT,
+            log,
+            onConnected
+        });
+    } else {
+        // Slow path: coordinator is dead, search through peers
+        failover.slowFailover({
+            name: NAME,
+            port: PORT,
+            log,
+            onConnected,
+            deadUrl: urlOrLeader
+        });
+    }
+}
+
 async function connectTo(url) {
     await pulse.register({ name: NAME, port: PORT, middlewareUrl: url });
 
     pulse.stopPulse();
     parent = url;
-    pulse.startPulse({ name: NAME, middlewareUrl: parent, log });
+    pulse.startPulse({
+        name: NAME,
+        port: PORT,
+        middlewareUrl: parent,
+        log,
+        onNeedFailover: handleFailover
+    });
 
     log("INFO", `Registered with ${parent}`);
 }
@@ -32,14 +85,23 @@ app.listen(PORT, async () => {
 
     try {
         await connectTo(parent);
-    } catch {
-        log("ERROR", `Could not register with ${parent}`);
+    } catch (err) {
+        // If initial registration fails (e.g. coordinator is a follower → 409)
+        if (err.response && err.response.status === 409 && err.response.data.leader) {
+            log("WARN", `Initial coordinator is not leader. Redirecting to ${err.response.data.leader}`);
+            if (err.response.data.peers) {
+                failover.updatePeers(err.response.data.peers);
+            }
+            handleFailover("fast", err.response.data.leader);
+        } else {
+            log("ERROR", `Could not register with ${parent}`);
+        }
     }
 
 });
 
 app.get("/parent", (req, res) => {
-    res.json({ parent });
+    res.json({ parent, peers: failover.getPeers() });
 });
 
 // Cambiar de padre en caliente
@@ -95,6 +157,7 @@ app.post("/send-message", async (req, res) => {
 
 app.post("/shutdown", (req, res) => {
     pulse.stopPulse(log);
+    failover.reset();
 
     res.json({ message: `${NAME} shutting down...` });
 

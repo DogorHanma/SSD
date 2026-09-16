@@ -7,7 +7,8 @@
     "coord1": "node src/coordinator/server.js 3000 1 http://localhost:3001,http://localhost:3002",
     "coord2": "node src/coordinator/server.js 3001 2 http://localhost:3000,http://localhost:3002",
     "coord3": "node src/coordinator/server.js 3002 3 http://localhost:3000,http://localhost:3001",
-    "worker": "node src/worker/index.js",
+    "coord-ngrok": "node src/coordinator/server.js 3000 1 https://URL_COMPAÑEROS.ngrok-free.dev https://geranium-unnamed-suffix.ngrok-free.dev",
+    "worker": "node src/worker/index.js 4000 worker-1 http://localhost:3002",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

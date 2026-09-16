@@ -4,9 +4,38 @@ const router = express.Router();
 const processManager = require("../services/processManager");
 const registry = require("../services/registry");
 const messages = require("../services/messages");
+const election = require("../services/election");
 
 function clientId(req) {
     return String(req.ip || "").replace(/^::ffff:/, "");
+}
+
+/**
+ * Middleware: only the leader can handle writes.
+ * - If I'm the leader → continue
+ * - If I know who the leader is → 409 with leader URL and peers
+ * - If no leader yet → 503 with retry and peers
+ */
+function leaderOnly(req, res, next) {
+    const st = election.getState();
+
+    if (election.isLeader()) {
+        return next();
+    }
+
+    const peerUrls = st.peers.map(p => p.url);
+
+    if (st.leaderUrl) {
+        return res.status(409).json({
+            leader: st.leaderUrl,
+            peers: peerUrls
+        });
+    }
+
+    return res.status(503).json({
+        retry: true,
+        peers: peerUrls
+    });
 }
 
 // Health
@@ -21,8 +50,8 @@ router.post("/create-server", (req, res) => {
     res.json({ message: `${name} created on port ${port}` });
 });
 
-// Register
-router.post("/register", (req, res) => {
+// Register — LEADER ONLY
+router.post("/register", leaderOnly, (req, res) => {
     const { name, url } = req.body;
     if (!name || !url)
         return res.status(400).json({ error: "Name and URL required" });
@@ -37,12 +66,17 @@ router.post("/register", (req, res) => {
     res.json({ message: "Server registered successfully" });
 });
 
-// Pulse
-router.post("/pulse/:name", (req, res) => {
+// Pulse — LEADER ONLY, returns cluster view
+router.post("/pulse/:name", leaderOnly, (req, res) => {
     const ok = registry.pulse(req.params.name);
     if (!ok) return res.status(404).json({ error: "Server not found" });
 
-    res.json({ message: "Pulse received" });
+    const st = election.getState();
+    res.json({
+        message: "Pulse received",
+        leader: st.leaderUrl,
+        peers: st.peers.map(p => p.url)
+    });
 });
 
 // Kill
@@ -54,12 +88,12 @@ router.post("/kill-server/:name", (req, res) => {
     res.json({ message: `${req.params.name} killed` });
 });
 
-// List
+// List — any coordinator can serve reads
 router.get("/servers", (req, res) => {
     res.json(registry.getAll());
 });
 
-// Overview
+// Overview — any coordinator can serve reads
 router.get("/overview", (req, res) => {
     res.json(registry.getAll().map(server => ({
         ...server,
@@ -67,8 +101,8 @@ router.get("/overview", (req, res) => {
     })));
 });
 
-// Receive a message from a mini server
-router.post("/send-message/:name", (req, res) => {
+// Receive a message from a mini server — LEADER ONLY
+router.post("/send-message/:name", leaderOnly, (req, res) => {
     const { name } = req.params;
     const { message } = req.body;
 
@@ -80,7 +114,7 @@ router.post("/send-message/:name", (req, res) => {
     res.status(201).json(entry);
 });
 
-// Read the messages of a mini server
+// Read the messages of a mini server — any coordinator can serve reads
 router.get("/send-message/:name", (req, res) => {
     res.json(messages.get(req.params.name));
 });
