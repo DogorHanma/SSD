@@ -29,7 +29,21 @@ router.post("/election/ping", (req, res) => {
 /* ----------------------------------------------------------------- estado -- */
 
 router.get("/election/state", (req, res) => {
-    res.json(engine.snapshot());
+    const snap = engine.snapshot();
+
+    // Eliminar informacion innecesaria para la respuesta publica
+    delete snap.term;
+    delete snap.fencingToken;
+    delete snap.quorum;
+    delete snap.clusterSize;
+    delete snap.timing;
+    delete snap.uptime;
+    delete snap.faults;
+    delete snap.counters;
+    delete snap.workers;
+    delete snap.strategyState;
+
+    res.json(snap);
 });
 
 router.get("/election/algorithms", (req, res) => {
