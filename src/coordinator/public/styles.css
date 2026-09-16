@@ -1,0 +1,162 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #1e1e2f;
+    color: white;
+    display: flex;
+    justify-content: center;
+    padding-top: 40px;
+}
+
+.container {
+    width: 500px;
+}
+
+h1 {
+    text-align: center;
+}
+
+.create-box {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+input {
+    flex: 1;
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+}
+
+button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background: #4cafef;
+    color: white;
+}
+
+button:hover {
+    background: #379ad6;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    background: #2a2a40;
+    margin-bottom: 8px;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.server-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.server-head a {
+    color: #4cafef;
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.list-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.list-head h2 {
+    margin: 0;
+}
+
+.list-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#lastUpdate {
+    font-size: 12px;
+    opacity: 0.55;
+    white-space: nowrap;
+}
+
+#reloadBtn:disabled {
+    background: #3a5c6e;
+    cursor: default;
+}
+
+.server-head .meta {
+    font-size: 12px;
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
+.dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.dot.online {
+    background: #7ddb8f;
+}
+
+.dot.offline {
+    background: #ff8080;
+}
+
+.server-addr {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    margin-top: 4px;
+    font-size: 12px;
+}
+
+.server-addr a {
+    color: #4cafef;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.server-addr .ip {
+    opacity: 0.4;
+    white-space: nowrap;
+}
+
+.messages {
+    margin-top: 10px;
+}
+
+.messages .message {
+    background: #1e1e2f;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+}
+
+.messages .empty {
+    opacity: 0.5;
+    font-style: italic;
+}
+
+.messages time {
+    opacity: 0.6;
+    font-size: 11px;
+    white-space: nowrap;
+}
