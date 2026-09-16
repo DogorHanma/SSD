@@ -4,42 +4,73 @@ const router = express.Router();
 const processManager = require("../services/processManager");
 const registry = require("../services/registry");
 const messages = require("../services/messages");
-const election = require("../services/election");
+const engine = require("../election/engine");
+const config = require("../config");
+const faults = require("../election/faults");
 
 function clientId(req) {
     return String(req.ip || "").replace(/^::ffff:/, "");
 }
 
-/**
- * Middleware: only the leader can handle writes.
- * - If I'm the leader → continue
- * - If I know who the leader is → 409 with leader URL and peers
- * - If no leader yet → 503 with retry and peers
- */
-function leaderOnly(req, res, next) {
-    const st = election.getState();
+// La vista del cluster que se le adjunta al worker en cada respuesta. Gracias
+// a esto el worker no necesita configuracion: aprende solo a quien preguntar
+// cuando su coordinador desaparezca.
+function clusterView() {
+    if (!config.electionEnabled) return {};
 
-    if (election.isLeader()) {
-        return next();
-    }
+    return {
+        leader: engine.leaderUrl(),
+        leaderId: engine.state.leader,
+        peers: engine.peerUrls()
+    };
+}
 
-    const peerUrls = st.peers.map(p => p.url);
+// Las ESCRITURAS solo las atiende el lider. Si llega a otro nodo, se le dice
+// al cliente quien manda ahora y este se redirige (asi encuentran al lider
+// los clientes de Raft). Las LECTURAS las sirve cualquiera.
+function rejectIfNotLeader(req, res) {
+    if (!config.electionEnabled) return false;
 
-    if (st.leaderUrl) {
-        return res.status(409).json({
-            leader: st.leaderUrl,
-            peers: peerUrls
+    // Nodo congelado: no puede participar en la eleccion, asi que tampoco
+    // puede atender clientes. Si siguiera respondiendo, un lider "muerto"
+    // retendria a sus workers para siempre y el failover no se veria nunca.
+    // Ojo: no le decimos quien es el lider, porque su idea de quien manda se
+    // quedo congelada tambien y mandaria al worker de vuelta a un fantasma.
+    if (faults.state.paused) {
+        res.status(503).json({
+            error: "Nodo fuera de servicio",
+            retry: true,
+            peers: engine.peerUrls()
         });
+        return true;
     }
 
-    return res.status(503).json({
-        retry: true,
-        peers: peerUrls
+    if (engine.isLeader()) return false;
+
+    const leader = engine.leaderUrl();
+
+    // Todavia no hay lider: eleccion en curso. No es un error del cliente,
+    // es que el sistema aun no sabe quien manda. Que reintente.
+    if (!leader) {
+        res.status(503).json({
+            error: "Eleccion en curso, todavia no hay lider",
+            retry: true,
+            ...clusterView()
+        });
+        return true;
+    }
+
+    res.status(409).json({
+        error: "No soy el lider",
+        ...clusterView()
     });
+    return true;
 }
 
 // Health
-router.get("/", (req, res) => {});
+router.get("/health", (req, res) => {
+    res.json({ ok: true, id: config.id, role: engine.state.role, leader: engine.state.leader });
+});
 
 // Create
 router.post("/create-server", (req, res) => {
@@ -50,11 +81,13 @@ router.post("/create-server", (req, res) => {
     res.json({ message: `${name} created on port ${port}` });
 });
 
-// Register — LEADER ONLY
-router.post("/register", leaderOnly, (req, res) => {
+// Register
+router.post("/register", (req, res) => {
     const { name, url } = req.body;
     if (!name || !url)
         return res.status(400).json({ error: "Name and URL required" });
+
+    if (rejectIfNotLeader(req, res)) return;
 
     const owner = clientId(req);
     const claimed = registry.claimedBy(name);
@@ -63,20 +96,17 @@ router.post("/register", leaderOnly, (req, res) => {
     if (claimed && claimed !== owner) return res.status(409).json({ error: `Name "${name}" is already taken by another machine. Pick a different one.` });
 
     registry.register(name, url, owner);
-    res.json({ message: "Server registered successfully" });
+    res.json({ message: "Server registered successfully", ...clusterView() });
 });
 
-// Pulse — LEADER ONLY, returns cluster view
-router.post("/pulse/:name", leaderOnly, (req, res) => {
-    const ok = registry.pulse(req.params.name);
-    if (!ok) return res.status(404).json({ error: "Server not found" });
+// Pulse
+router.post("/pulse/:name", (req, res) => {
+    if (rejectIfNotLeader(req, res)) return;
 
-    const st = election.getState();
-    res.json({
-        message: "Pulse received",
-        leader: st.leaderUrl,
-        peers: st.peers.map(p => p.url)
-    });
+    const ok = registry.pulse(req.params.name);
+    if (!ok) return res.status(404).json({ error: "Server not found", ...clusterView() });
+
+    res.json({ message: "Pulse received", ...clusterView() });
 });
 
 // Kill
@@ -88,12 +118,12 @@ router.post("/kill-server/:name", (req, res) => {
     res.json({ message: `${req.params.name} killed` });
 });
 
-// List — any coordinator can serve reads
+// List
 router.get("/servers", (req, res) => {
     res.json(registry.getAll());
 });
 
-// Overview — any coordinator can serve reads
+// Overview
 router.get("/overview", (req, res) => {
     res.json(registry.getAll().map(server => ({
         ...server,
@@ -101,12 +131,13 @@ router.get("/overview", (req, res) => {
     })));
 });
 
-// Receive a message from a mini server — LEADER ONLY
-router.post("/send-message/:name", leaderOnly, (req, res) => {
+// Receive a message from a mini server
+router.post("/send-message/:name", (req, res) => {
     const { name } = req.params;
     const { message } = req.body;
 
     if (!message) return res.status(400).json({ error: "Message required" });
+    if (rejectIfNotLeader(req, res)) return;
     if (!registry.exists(name)) return res.status(404).json({ error: "Server not found" });
     if (registry.claimedBy(name) !== clientId(req)) return res.status(403).json({ error: `Only ${name}'s own machine can send messages as ${name}` });
 
@@ -114,7 +145,7 @@ router.post("/send-message/:name", leaderOnly, (req, res) => {
     res.status(201).json(entry);
 });
 
-// Read the messages of a mini server — any coordinator can serve reads
+// Read the messages of a mini server
 router.get("/send-message/:name", (req, res) => {
     res.json(messages.get(req.params.name));
 });

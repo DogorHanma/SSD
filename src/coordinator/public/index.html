@@ -1,60 +1,20 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coordinator Panel | SSD</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <title>Coordinator Panel</title>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
     <div class="container">
         <h1>Mini Server Orchestrator</h1>
 
-        <!-- Bully Election Status Panel -->
-        <div id="electionPanel" class="election-panel">
-            <div class="election-header">
-                <div class="election-title">
-                    <span class="election-icon">⚡</span>
-                    <span>ESTADO DEL CLÚSTER</span>
-                </div>
-                <span id="electionAlgo" class="election-algo">BULLY</span>
-            </div>
-
-            <div class="election-identity">
-                <div class="identity-row">
-                    <span class="identity-label">Yo soy</span>
-                    <span id="myId" class="identity-value">—</span>
-                    <span id="myUrl" class="identity-url">—</span>
-                </div>
-                <div id="roleBadge" class="role-badge role-follower">
-                    <span id="roleIcon">👤</span>
-                    <span id="roleText">FOLLOWER</span>
-                </div>
-            </div>
-
-            <div class="election-leader" id="leaderSection">
-                <span class="leader-label">LÍDER ACTUAL</span>
-                <div class="leader-info">
-                    <span id="leaderName" class="leader-name">—</span>
-                    <span id="leaderUrl" class="leader-url">—</span>
-                </div>
-            </div>
-
-            <div class="election-peers">
-                <div class="peers-header">
-                    <span>PEERS CONOCIDOS</span>
-                    <span id="peerCount" class="peer-count">0</span>
-                </div>
-                <ul id="peerList" class="peer-list"></ul>
-            </div>
-        </div>
-
         <div class="create-box">
             <input id="nameInput" placeholder="Server name" />
             <button id="createBtn">Create</button>
+        </div>
+
+        <div style="margin-top: 15px; text-align: center;">
+            <a href="election.html" style="color: var(--primary); text-decoration: none; font-weight: 500;">➔ Ir al Panel de Elección de Líder</a>
         </div>
 
         <div class="list-head">

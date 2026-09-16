@@ -1,26 +1,37 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Worker Console | SSD</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mini Server</title>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
     <div class="container">
         <h1 id="serverName"></h1>
-        <p id="serverPort"></p>
+        <p id="serverPort" class="subtitle"></p>
+
+        <!-- Lo primero que se mira cuando muere el coordinador. -->
+        <div id="statusCard" class="status-card">
+            <div class="status-line">
+                <span id="statusDot" class="dot"></span>
+                <strong id="statusText">Conectando...</strong>
+            </div>
+            <div class="status-parent">
+                mi coordinador: <code id="currentParent">-</code>
+            </div>
+            <div id="pulseInfo" class="status-pulse"></div>
+        </div>
 
         <div class="field">
-            <label for="parentInput">Coordinador padre</label>
-            <div class="row">
-                <input id="parentInput" placeholder="http://ip:3000" />
-                <button id="parentBtn">Switch</button>
-            </div>
-            <p id="parentStatus" class="hint"></p>
+            <label>Coordinadores que conozco</label>
+            <p class="hint">No los tengo configurados: me los va contando mi coordinador en cada pulso.</p>
+            <ul id="coordList" class="coord-list"></ul>
+        </div>
+
+        <div class="field">
+            <label>Que estoy haciendo</label>
+            <ul id="journal" class="journal"></ul>
         </div>
 
         <div class="field">
@@ -32,7 +43,17 @@
             <p id="status" class="hint"></p>
         </div>
 
-        <button id="shutdownBtn">Shutdown</button>
+        <details class="advanced">
+            <summary>Cambiar de coordinador a mano</summary>
+            <p class="hint">No hace falta tocar esto: si el coordinador cae, me reengancho solo.</p>
+            <div class="row">
+                <input id="parentInput" placeholder="http://ip:3000" />
+                <button id="parentBtn">Switch</button>
+            </div>
+            <p id="parentStatus" class="hint"></p>
+        </details>
+
+        <button id="shutdownBtn" class="danger">Shutdown</button>
     </div>
 
     <script src="app.js"></script>

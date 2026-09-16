@@ -1,76 +1,87 @@
 const axios = require("axios");
-const failover = require("./failover.service");
+
+const HEADERS = { "ngrok-skip-browser-warning": "true" };
 
 let pulseInterval = null;
 
-async function register({ name, port, middlewareUrl }) {
-    await axios.post(`${middlewareUrl}/register`, {
-        name,
-        url: `http://localhost:${port}`
-    }, { timeout: 5000 });
+function asRedirect(err) {
+    const response = err.response;
+    if (!response) return null;
+
+    const data = response.data || {};
+
+    // 409 -> hay lider y no soy yo.  503 -> eleccion en curso, aun no hay lider.
+    if (response.status !== 409 && response.status !== 503) return null;
+
+    const redirect = new Error(data.error || "Redirigido a otro coordinador");
+    redirect.redirectTo = data.leader || null;
+    redirect.peers = data.peers || [];
+    redirect.retry = Boolean(data.retry);
+
+    return redirect;
 }
 
-function startPulse({ name, port, middlewareUrl, log, onNeedFailover }) {
+async function register({ name, url, middlewareUrl }) {
+    try {
+        const res = await axios.post(
+            `${middlewareUrl}/register`,
+            { name, url },
+            { timeout: 5000, headers: HEADERS }
+        );
+
+        return res.data;
+
+    } catch (err) {
+        const redirect = asRedirect(err);
+        if (redirect) throw redirect;
+        throw err;
+    }
+}
+
+// El pulso es el detector de fallos del worker.
+function startPulse({ name, middlewareUrl, log, interval, onView, onRedirect, onLost }) {
     stopPulse();
 
+    const every = interval || 2000;
+
     pulseInterval = setInterval(async () => {
-        // Don't pulse while failover is in progress
-        if (failover.isInProgress()) return;
-
         try {
-            const res = await axios.post(`${middlewareUrl}/pulse/${name}`, {}, { timeout: 5000 });
+            const res = await axios.post(`${middlewareUrl}/pulse/${name}`, {}, { timeout: 5000, headers: HEADERS });
 
-            // Successful pulse — save peers from cluster view
-            if (res.data && res.data.peers) {
-                failover.updatePeers(res.data.peers);
-            }
-            if (res.data && res.data.leader) {
-                log("INFO", `Pulse OK (leader: ${res.data.leader})`);
-            } else {
-                log("INFO", "Pulse sent");
-            }
+            // Cada pulso correcto trae la vista del cluster de propina. Asi el worker siempre sabe a quien preguntar si el lider desaparece.
+            if (onView) onView(res.data || {});
 
         } catch (err) {
-            if (err.response) {
-                const status = err.response.status;
+            const redirect = asRedirect(err);
 
-                if (status === 409 && err.response.data && err.response.data.leader) {
-                    // Fast path: coordinator is alive but not leader
-                    const leaderUrl = err.response.data.leader;
+            if (redirect) {
+                if (redirect.peers.length && onView) onView({ peers: redirect.peers });
 
-                    // Also save peers from the 409 response
-                    if (err.response.data.peers) {
-                        failover.updatePeers(err.response.data.peers);
-                    }
-
-                    log("WARN", `409 → Not the leader. Leader is at ${leaderUrl}`);
-
-                    if (onNeedFailover) {
-                        onNeedFailover("fast", leaderUrl);
-                    }
+                // El coordinador vive y me dice quien manda.
+                if (redirect.redirectTo && onRedirect) {
+                    log("WARN", `El coordinador ya no es el lider, me mandan a ${redirect.redirectTo}`);
+                    onRedirect(redirect.redirectTo);
                     return;
                 }
 
-                if (status === 503 && err.response.data && err.response.data.retry) {
-                    // No leader yet, save peers and retry
-                    if (err.response.data.peers) {
-                        failover.updatePeers(err.response.data.peers);
-                    }
-                    log("WARN", "503 → No leader yet. Will retry...");
-                    return;
-                }
-
-                log("ERROR", `Pulse failed (HTTP ${status})`);
-            } else {
-                // Coordinator is dead — slow path
-                log("ERROR", `Coordinator ${middlewareUrl} unreachable`);
-
-                if (onNeedFailover) {
-                    onNeedFailover("slow", middlewareUrl);
-                }
+                // Me contesta, pero no sabe quien manda (esta fuera de servicio o hay eleccion en curso). Me toca buscarlo por mi cuenta.
+                log("WARN", "El coordinador no sabe quien es el lider, buscando");
+                if (onLost) onLost("no-leader");
+                return;
             }
+
+            // El servidor devolvio 404: el registro se perdio (reinicio del coordinador). Hay que volver a registrarse, no seguir pulsando.
+            if (err.response && err.response.status === 404) {
+                log("WARN", "El coordinador no me conoce, registrando");
+                if (onLost) onLost("unregistered");
+                return;
+            }
+
+            // Camino lento: silencio total. El coordinador esta muerto y no hay nadie que me diga a donde ir; toca buscar al nuevo lider.
+            log("ERROR", "Sin pulso: el coordinador no responde");
+            if (onLost) onLost("unreachable");
         }
-    }, 5000);
+    }, every);
 }
 
 function stopPulse(log) {
@@ -85,5 +96,6 @@ function stopPulse(log) {
 module.exports = {
     register,
     startPulse,
-    stopPulse
+    stopPulse,
+    HEADERS
 };

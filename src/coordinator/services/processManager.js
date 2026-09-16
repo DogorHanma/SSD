@@ -1,29 +1,30 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const config = require("../config");
 const log = require("../utils/logger");
 
 let serverProcesses = {};
-let nextPort = 4000;
+let nextPort = Number(process.env.WORKER_PORT_BASE || 4000);
 
 function createServer(name) {
     const port = nextPort++;
 
     const workerPath = path.resolve(__dirname, "../../worker/index.js");
 
-    console.log(process.env.MIDDLEWARE_URL)
-
-    const middlewareUrl = process.env.MIDDLEWARE_URL || "http://localhost:3000";
+    // El worker tiene que registrarse en la URL publica de este coordinador
+    const middlewareUrl = process.env.MIDDLEWARE_URL || config.publicUrl;
 
     const child = spawn("node", [workerPath, port, name, middlewareUrl], {
-        env: process.env
+        env: { ...process.env, WORKER_PUBLIC_URL: process.env.WORKER_PUBLIC_URL || `http://localhost:${port}` }
     });
 
     if (!fs.existsSync("logs")) {
         fs.mkdirSync("logs");
     }
 
-    const logStream = fs.createWriteStream(`logs/${name}.log`, { flags: "a" });
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const logStream = fs.createWriteStream(`logs/${safeName}.log`, { flags: "a" });
 
     child.stdout.pipe(logStream);
     child.stderr.pipe(logStream);

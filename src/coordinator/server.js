@@ -1,32 +1,29 @@
-require("dotenv").config();
-
+const config = require("./config");
 const app = require("./app");
 const startCleanup = require("./services/cleanup");
-const election = require("./services/election");
+const engine = require("./election/engine");
+const registry = require("./services/registry");
+const messages = require("./services/messages");
 const log = require("./utils/logger");
 
-const PORT = process.argv[2] || process.env.PORT || 3000;
-const ID = process.argv[3];
-const PEERS = process.argv[4] ? process.argv[4].split(",").filter(Boolean) : [];
-const PUBLIC_URL = process.argv[5] || `http://localhost:${PORT}`;
+app.listen(config.port, () => {
+    log("INFO", `Coordinator [${config.id}] escuchando en http://localhost:${config.port}`);
+    log("INFO", `URL publica: ${config.publicUrl}`);
 
-if (!ID) {
-    log("ERROR", "Usage: node src/coordinator/server.js <PORT> <ID> [PEERS] [PUBLIC_URL]");
-    log("ERROR", "  PORT:       Port number");
-    log("ERROR", "  ID:         Numeric coordinator ID (lower = higher priority)");
-    log("ERROR", "  PEERS:      Comma-separated URLs of other coordinators");
-    log("ERROR", "  PUBLIC_URL: (Optional) Public URL like ngrok, defaults to localhost");
-    process.exit(1);
-}
+    if (!config.electionEnabled) {
+        log("WARN", "Eleccion desactivada (ELECTION=off): coordinador unico, con SPOF");
+        return;
+    }
 
-app.listen(PORT, () => {
-    log("INFO", `Coordinator [ID=${ID}] running on http://localhost:${PORT} (Public: ${PUBLIC_URL})`);
+    engine.init(config, {
+        dataVersion: () => registry.getAll().length + Object.values(messages.getAll()).reduce((total, list) => total + list.length, 0),
 
-    election.init({
-        id: Number(ID),
-        url: PUBLIC_URL,
-        peers: PEERS
+        // Los workers registrados aqui viajan en la foto del nodo, para que el
+        // panel pueda ensenar a que coordinador esta enganchado cada worker.
+        workers: () => registry.getAll().map(server => ({ name: server.name, online: server.online }))
     });
+
+    engine.start();
 });
 
 startCleanup();
