@@ -175,8 +175,10 @@ function handleMessage(envelope) {
     events.emit({ kind: "recv", from: fromId, to: state.id, type: envelope.type, term: envelope.term });
 
     // Cualquier mensaje es prueba de vida del emisor.
+    // NO auto-agregar: solo actualizar peers ya conocidos.
     if (envelope.from && envelope.from.url) {
-        const peer = addPeer(envelope.from.url) || peers.get(envelope.from.url);
+        const clean = String(envelope.from.url).trim().replace(/\/+$/, "");
+        const peer = peers.get(clean);
         if (peer) {
             peer.id = peer.id || fromId;
             peer.lastSeen = Date.now();
@@ -202,17 +204,17 @@ function handlePing(body) {
     if (!faults.canTalkTo(fromId)) return null;
 
     if (body && body.from && body.from.url) {
-        const peer = addPeer(body.from.url) || peers.get(body.from.url);
+        // Solo actualizar peers que YA conozco (agregados manualmente o por config).
+        // NO auto-agregar peers desconocidos: el nodo arranca vacio y el
+        // usuario decide cuando conectarse.
+        const clean = String(body.from.url).trim().replace(/\/+$/, "");
+        const peer = peers.get(clean);
         if (peer) {
             peer.id = body.from.id;
             peer.lastSeen = Date.now();
             peer.alive = true;
         }
     }
-
-    // Auto-ensamblado: aprendo los peers que conoce quien me pinga. Asi basta
-    // con que todos apunten a una semilla para que la malla se forme sola.
-    (body && body.peers ? body.peers : []).forEach(addPeer);
 
     events.count("__ping", "received");
 
@@ -241,7 +243,7 @@ async function pingPeer(peer) {
         peer.alive = true;
         peer.snapshot = res;      // cache para /cluster
 
-        (res.peers || []).map(item => (typeof item === "string" ? item : item.url)).forEach(addPeer);
+        // Ya no auto-descubrimos peers del gossip: el usuario los agrega manualmente.
 
         // Un nodo que arranca tarde adopta el algoritmo que ya corre el cluster.
         if (!algoLocked && res.algo && res.algo !== state.algo && strategies.has(res.algo)) {

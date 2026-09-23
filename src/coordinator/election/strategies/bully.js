@@ -72,6 +72,22 @@ module.exports = {
         if (now < ctx.state.settleUntil) return;
 
         if (ctx.role === "leader") {
+            // --- Anti split-brain: si hay alguien mayor vivo, NO soy lider ---
+            // El invariante Bully es que SIEMPRE manda el ID mas alto vivo.
+            // Sin este chequeo, un nodo que se auto-elige antes de descubrir a
+            // los demas se queda de lider para siempre (split-brain con el
+            // verdadero mayor).
+            const higherAlive = ctx.alivePeers().filter(
+                peer => isGreater(peer.id, ctx.self.id)
+            );
+            if (higherAlive.length > 0) {
+                ctx.info(`Nodo mayor detectado (${higherAlive.map(p => p.id).join(",")}), cedo liderazgo`);
+                ctx.state.electing = false;
+                ctx.stepDown();
+                startElection(ctx);
+                return;
+            }
+
             // Reafirmacion periodica del mando. Sin esto, un lider que vuelve
             // de una pausa o de una particion se queda callado creyendose el
             // jefe mientras otro nodo tambien lo cree: dos lideres para
