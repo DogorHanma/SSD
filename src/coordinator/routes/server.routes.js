@@ -34,8 +34,6 @@ function rejectIfNotLeader(req, res) {
     // Nodo congelado: no puede participar en la eleccion, asi que tampoco
     // puede atender clientes. Si siguiera respondiendo, un lider "muerto"
     // retendria a sus workers para siempre y el failover no se veria nunca.
-    // Ojo: no le decimos quien es el lider, porque su idea de quien manda se
-    // quedo congelada tambien y mandaria al worker de vuelta a un fantasma.
     if (faults.state.paused) {
         res.status(503).json({
             error: "Nodo fuera de servicio",
@@ -60,6 +58,7 @@ function rejectIfNotLeader(req, res) {
         return true;
     }
 
+    // Le decimos al cliente quien es el lider actual para que se redirija (el worker "cambia de padre")
     res.status(409).json({
         error: "No soy el lider",
         ...clusterView()

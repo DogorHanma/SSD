@@ -65,13 +65,7 @@ router.post("/election/algorithm", (req, res) => {
     res.json({ message: `Algoritmo activo: ${algo}`, state: engine.snapshot() });
 });
 
-router.post("/election/id", (req, res) => {
-    const { id } = req.body;
-    if (!id || typeof id !== "string") return res.status(400).json({ error: "ID requerido" });
-    
-    engine.setId(id);
-    res.json({ message: `ID cambiado a ${id}` });
-});
+
 
 router.post("/election/trigger", (req, res) => {
     engine.stepDown();
@@ -85,15 +79,42 @@ router.get("/election/peers", (req, res) => {
 });
 
 router.post("/election/peers", (req, res) => {
-    const { url } = req.body;
+    const { url, peers: incomingPeers } = req.body;
 
     if (!url) return res.status(400).json({ error: "URL required" });
 
     const peer = engine.addPeer(url);
     if (!peer) return res.status(400).json({ error: "URL invalida o es la mia" });
 
+    // Si nos pasan peers en la peticion (ej. la notificacion bidireccional),
+    // los aprendemos inmediatamente.
+    if (incomingPeers && Array.isArray(incomingPeers)) {
+        incomingPeers.forEach(p => {
+            const pUrl = typeof p === "string" ? p : p.url;
+            if (pUrl) engine.addPeer(pUrl);
+        });
+    }
+
+    // Notificacion bidireccional: le aviso al peer que lo he añadido para que
+    // el tambien me añada a mi. Asi la conexion es mutua inmediatamente.
+    const targetUrl = `${peer.url}/election/peers`;
+    if (req.body.fromNotification !== true) {
+        const axios = require("axios");
+        axios.post(targetUrl, { 
+            url: config.publicUrl, 
+            peers: engine.snapshot().peers,
+            fromNotification: true 
+        }, {
+            timeout: 5000,
+            headers: { "ngrok-skip-browser-warning": "true" }
+        }).catch(err => { 
+            console.warn(`[COORDINATOR] Fallo notificacion bidireccional a ${targetUrl}: ${err.message}`); 
+        });
+    }
+
     res.json({ message: `Peer añadido: ${peer.url}`, peers: engine.snapshot().peers });
 });
+
 
 router.delete("/election/peers", (req, res) => {
     const { url } = req.body;

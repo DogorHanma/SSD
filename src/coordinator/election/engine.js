@@ -204,11 +204,8 @@ function handlePing(body) {
     if (!faults.canTalkTo(fromId)) return null;
 
     if (body && body.from && body.from.url) {
-        // Solo actualizar peers que YA conozco (agregados manualmente o por config).
-        // NO auto-agregar peers desconocidos: el nodo arranca vacio y el
-        // usuario decide cuando conectarse.
         const clean = String(body.from.url).trim().replace(/\/+$/, "");
-        const peer = peers.get(clean);
+        const peer = addPeer(clean);
         if (peer) {
             peer.id = body.from.id;
             peer.lastSeen = Date.now();
@@ -243,7 +240,21 @@ async function pingPeer(peer) {
         peer.alive = true;
         peer.snapshot = res;      // cache para /cluster
 
-        // Ya no auto-descubrimos peers del gossip: el usuario los agrega manualmente.
+        // Auto-discovery: aprendo TODOS los peers de los nodos a los que yo
+        // decido pingar. Como solo pingo a nodos que yo acepte manualmente,
+        // no hay riesgo de reconexion zombie al reiniciar.
+        if (res.peers && Array.isArray(res.peers)) {
+            res.peers.forEach(item => {
+                const url = typeof item === "string" ? item : item.url;
+                if (url) {
+                    const clean = String(url).trim().replace(/\/+$/, "");
+                    if (clean !== state.url && !peers.has(clean)) {
+                        const p = addPeer(clean);
+                        if (p && item.id) p.id = item.id;
+                    }
+                }
+            });
+        }
 
         // Un nodo que arranca tarde adopta el algoritmo que ya corre el cluster.
         if (!algoLocked && res.algo && res.algo !== state.algo && strategies.has(res.algo)) {
@@ -432,17 +443,7 @@ function buildContext() {
 
 /* ------------------------------------------------------------- publico -- */
 
-function setId(newId) {
-    if (!newId || newId === state.id) return;
-    
-    // Cambiar la identidad del nodo en vivo
-    state.id = newId;
-    config.id = newId;
-    
-    // Forzar una re-eleccion inmediata bajo la nueva identidad
-    ctx.stepDown();
-    ctx.log("id-changed", { newId });
-}
+
 
 function snapshot() {
     return {
@@ -514,7 +515,6 @@ module.exports = {
     stop,
     state,
     snapshot,
-    setId,
     handleMessage,
     handlePing,
     setAlgorithm,

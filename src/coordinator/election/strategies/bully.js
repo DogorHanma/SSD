@@ -10,6 +10,15 @@ const { isGreater } = require("../ids");
 // particion, cada lado elige su propio lider -> split-brain garantizado.
 // Coste: O(n^2) mensajes en el peor caso, y se nota en el contador del panel.
 
+// Devuelve el peer vivo con ID mas alto que el mio, o null.
+function highestAlivePeer(ctx) {
+    const higher = ctx.alivePeers().filter(
+        peer => isGreater(peer.id, ctx.self.id)
+    );
+    if (higher.length === 0) return null;
+    return higher.reduce((best, peer) => isGreater(peer.id, best.id) ? peer : best);
+}
+
 function startElection(ctx) {
     const now = Date.now();
 
@@ -31,9 +40,24 @@ function startElection(ctx) {
 
     higher.forEach(node => ctx.send(node.id, "ELECTION", {}));
 
-    // Si ninguno de los mayores contesta a tiempo, es que estan todos muertos.
+    // Si ninguno de los mayores contesta a tiempo, reviso otra vez.
     ctx.timer("answer", ctx.timing.electionMin, () => {
         if (ctx.state.gotAnswer) return;
+
+        // Re-verificar: si sigue habiendo alguien mayor vivo (por pings),
+        // aceptarlo como lider directamente en vez de auto-proclamarme.
+        // Esto evita el ciclo infinito cuando el peer mayor no responde
+        // a ELECTION (ej: implementacion diferente) pero SI responde pings.
+        const best = highestAlivePeer(ctx);
+        if (best) {
+            ctx.state.electing = false;
+            ctx.clearTimer("answer");
+            ctx.clearTimer("coordinator");
+            ctx.becomeFollower(best.id);
+            ctx.info(`Sin respuesta a ELECTION pero ${best.id} sigue vivo, lo acepto como lider`);
+            return;
+        }
+
         win(ctx);
     });
 }
@@ -72,26 +96,17 @@ module.exports = {
         if (now < ctx.state.settleUntil) return;
 
         if (ctx.role === "leader") {
-            // --- Anti split-brain: si hay alguien mayor vivo, NO soy lider ---
-            // El invariante Bully es que SIEMPRE manda el ID mas alto vivo.
-            // Sin este chequeo, un nodo que se auto-elige antes de descubrir a
-            // los demas se queda de lider para siempre (split-brain con el
-            // verdadero mayor).
-            const higherAlive = ctx.alivePeers().filter(
-                peer => isGreater(peer.id, ctx.self.id)
-            );
-            if (higherAlive.length > 0) {
-                ctx.info(`Nodo mayor detectado (${higherAlive.map(p => p.id).join(",")}), cedo liderazgo`);
+            // --- Anti split-brain: si hay alguien mayor vivo, cedo a el ---
+            // Directamente me hago follower, sin lanzar eleccion.
+            const best = highestAlivePeer(ctx);
+            if (best) {
+                ctx.info(`Nodo mayor detectado (${best.id}), me hago follower`);
                 ctx.state.electing = false;
-                ctx.stepDown();
-                startElection(ctx);
+                ctx.becomeFollower(best.id);
                 return;
             }
 
-            // Reafirmacion periodica del mando. Sin esto, un lider que vuelve
-            // de una pausa o de una particion se queda callado creyendose el
-            // jefe mientras otro nodo tambien lo cree: dos lideres para
-            // siempre. El anuncio es lo que obliga al peor de los dos a ceder.
+            // Reafirmacion periodica del mando.
             if (now - (ctx.state.lastAnnounce || 0) < ctx.timing.heartbeat * 3) return;
 
             ctx.state.lastAnnounce = now;
@@ -99,8 +114,34 @@ module.exports = {
             return;
         }
 
+        // Si ya tengo lider vivo, no hago nada.
         const leaderAlive = ctx.leader && ctx.alive(ctx.leader);
         if (leaderAlive) return;
+
+        // --- Candidato: si hay un peer mayor vivo y la eleccion ya expiro,
+        //     aceptarlo como lider directamente (no esperar COORDINATOR). ---
+        if (ctx.role === "candidate" && ctx.state.electing) {
+            const elapsed = now - ctx.state.startedAt;
+            const best = highestAlivePeer(ctx);
+
+            // Hay alguien mayor vivo: darle tiempo para que se proclame.
+            if (best && elapsed < ctx.timing.electionMax) return;
+
+            // Eleccion expirada y hay alguien mayor vivo: aceptarlo ya.
+            if (best && elapsed >= ctx.timing.electionMax) {
+                ctx.state.electing = false;
+                ctx.clearTimer("answer");
+                ctx.clearTimer("coordinator");
+                ctx.becomeFollower(best.id);
+                ctx.info(`Eleccion expirada, acepto a ${best.id} como lider`);
+                return;
+            }
+
+            // Eleccion expirada y nadie mayor vivo: reintentar.
+            if (elapsed >= ctx.timing.electionMax) {
+                ctx.state.electing = false;
+            }
+        }
 
         startElection(ctx);
     },
@@ -121,9 +162,19 @@ module.exports = {
             ctx.clearTimer("answer");
 
             // Hay alguien mayor vivo: le doy tiempo a que se proclame.
-            // Si no lo hace, vuelvo a empezar.
             ctx.timer("coordinator", ctx.timing.electionMax, () => {
+                // Si ya tengo lider, no hago nada.
                 if (ctx.leader) return;
+
+                // Re-check: si hay alguien mayor vivo, aceptarlo.
+                const best = highestAlivePeer(ctx);
+                if (best) {
+                    ctx.state.electing = false;
+                    ctx.becomeFollower(best.id);
+                    ctx.info(`Timeout COORDINATOR, acepto a ${best.id} como lider`);
+                    return;
+                }
+
                 ctx.state.electing = false;
                 startElection(ctx);
             });
@@ -134,11 +185,9 @@ module.exports = {
             const leader = message.payload.leader || from;
 
             // Ya tengo un lider vivo y mejor que el que se anuncia: paso.
-            // Esto es lo que evita el baile de anuncios al sanar una particion.
             if (ctx.leader && ctx.alive(ctx.leader) && isGreater(ctx.leader, leader)) return;
 
-            // Si el que se proclama es menor que yo, no lo acepto: le disputo
-            // el puesto. Esta es literalmente la parte "matona" del algoritmo.
+            // Si el que se proclama es menor que yo, no lo acepto: le disputo.
             if (isGreater(ctx.self.id, leader)) {
                 ctx.state.electing = false;
                 startElection(ctx);
@@ -155,6 +204,16 @@ module.exports = {
     onPeerSuspected(ctx, peerId) {
         if (!peerId) return;
         if (ctx.leader && String(peerId) === String(ctx.leader)) startElection(ctx);
+    },
+
+    onPeerRecovered(ctx, peerId) {
+        if (!peerId) return;
+        // Si se recupera un peer con ID mayor y yo soy lider, ceder.
+        if (ctx.role === "leader" && isGreater(peerId, ctx.self.id)) {
+            ctx.info(`Peer mayor ${peerId} recuperado, cedo liderazgo`);
+            ctx.state.electing = false;
+            ctx.becomeFollower(peerId);
+        }
     },
 
     describe(ctx) {
