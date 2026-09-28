@@ -4,11 +4,16 @@ const startCleanup = require("./services/cleanup");
 const engine = require("./election/engine");
 const registry = require("./services/registry");
 const messages = require("./services/messages");
+const protocol = require("./services/examProtocol");
 const log = require("./utils/logger");
 
 app.listen(config.port, () => {
     log("INFO", `Coordinator [${config.id}] escuchando en http://localhost:${config.port}`);
     log("INFO", `URL publica: ${config.publicUrl}`);
+
+    // Inicializar el protocolo del examen
+    protocol.init({ id: config.id, url: config.publicUrl });
+    protocol.startHeartbeat(2000);
 
     if (!config.electionEnabled) {
         log("WARN", "Eleccion desactivada (ELECTION=off): coordinador unico, con SPOF");
