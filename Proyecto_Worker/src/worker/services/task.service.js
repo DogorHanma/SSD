@@ -10,8 +10,31 @@ const LAG_MS = Number(process.env.TASK_LAG_MS || 0);
 //           - REYES GARCÍA OSCAR EDUARDO  (CAP 2: http_fetch)
 // + capacidad propia: sort_numbers
 
-const CAPABILITIES = ["stats_compute", "http_fetch"];
+const CAPABILITIES_LIST = [
+    {
+        name: "stats_compute",
+        description: "Calcula promedio, mínimo y máximo de una lista de números.",
+        payload: {
+            numbers: [1, 2, 3, 4, 5]
+        }
+    },
+    {
+        name: "http_fetch",
+        description: "Hace fetch a una URL y retorna el status.",
+        payload: {
+            url: "https://www.google.com"
+        }
+    },
+    {
+        name: "sort_numbers",
+        description: "Ordena una lista de números de menor a mayor.",
+        payload: {
+            numbers: [9, 2, 5, 1, 7]
+        }
+    }
+];
 
+const CAPABILITIES = CAPABILITIES_LIST.map(c => c.name);
 // ---------------------------------------------------------------- estado
 
 const active = new Map();    // taskId -> { taskId, type, startedAt }
@@ -25,7 +48,12 @@ async function execute(taskId, type, payload) {
 
         // CAP 4: Calcula promedio, mínimo y máximo de una lista de números.
         case "stats_compute": {
-            const nums = payload.numbers;
+            let nums = payload.numbers;
+            // Tolerancia a fallos: si el coordinador lo manda como string, lo parseamos
+            if (typeof nums === 'string') {
+                try { nums = JSON.parse(nums); } catch(e) {}
+            }
+
             if (!Array.isArray(nums) || nums.length === 0) {
                 throw new Error("'numbers' debe ser un array no vacío");
             }
@@ -45,6 +73,18 @@ async function execute(taskId, type, payload) {
             const ms = Date.now() - start;
 
             return { status: res.status, ms };
+        }
+
+        // Capacidad propia: Ordenar números
+        case "sort_numbers": {
+            let nums = payload.numbers;
+            // Tolerancia a fallos: si el coordinador lo manda como string, lo parseamos
+            if (typeof nums === 'string') {
+                try { nums = JSON.parse(nums); } catch(e) {}
+            }
+
+            if (!Array.isArray(nums)) throw new Error("'numbers' debe ser un array");
+            return { sorted: [...nums].sort((a, b) => a - b) };
         }
 
         default:
@@ -123,6 +163,7 @@ function load() {
 
 module.exports = {
     CAPABILITIES,
+    CAPABILITIES_LIST,
     LAG_MS,
     runTask,
     load,

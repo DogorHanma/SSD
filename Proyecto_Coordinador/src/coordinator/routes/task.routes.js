@@ -26,6 +26,7 @@ router.get("/task/workers", async (req, res) => {
                 url: w.url,
                 online: true,
                 capabilities: r.data.capabilities || [],
+                schemas: r.data.schemas || {},
                 load: r.data.load || 0,
                 taskLagMs: r.data.taskLagMs || 0
             });

@@ -106,65 +106,6 @@ workerSelect.addEventListener("change", onWorkerChange);
 capabilitySelect.addEventListener("change", onCapabilityChange);
 sendTaskBtn.addEventListener("click", sendTask);
 
-// Payload templates para las 6 capacidades del examen + custom
-const PAYLOAD_TEMPLATES = {
-    // CAP 1: math_compute
-    math_compute: {
-        fields: [
-            { id: "operation", placeholder: "add | sub | mul | div", type: "text", label: "Operación" },
-            { id: "a", placeholder: "10", type: "number", label: "Operando A" },
-            { id: "b", placeholder: "5", type: "number", label: "Operando B" }
-        ],
-        build: () => ({
-            operation: document.getElementById("field-operation").value.trim(),
-            a: parseFloat(document.getElementById("field-a").value),
-            b: parseFloat(document.getElementById("field-b").value)
-        })
-    },
-    // CAP 2: http_fetch
-    http_fetch: {
-        fields: [{ id: "url", placeholder: "https://jsonplaceholder.typicode.com/posts/1", type: "text", label: "URL a consultar" }],
-        build: () => ({ url: document.getElementById("field-url").value.trim() })
-    },
-    // CAP 3: search_text
-    search_text: {
-        fields: [
-            { id: "text", placeholder: "hola mundo hola", type: "text", label: "Texto" },
-            { id: "query", placeholder: "hola", type: "text", label: "Búsqueda (query)" }
-        ],
-        build: () => ({
-            text: document.getElementById("field-text").value,
-            query: document.getElementById("field-query").value
-        })
-    },
-    // CAP 4: stats_compute
-    stats_compute: {
-        fields: [{ id: "numbers", placeholder: "1, 2, 3, 4, 5", type: "text", label: "Números (separados por coma)" }],
-        build: () => {
-            const raw = document.getElementById("field-numbers").value;
-            const numbers = raw.split(",").map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
-            return { numbers };
-        }
-    },
-    // CAP 5: vector_distance
-    vector_distance: {
-        fields: [
-            { id: "vec-a", placeholder: "0, 0", type: "text", label: "Vector A (x, y)" },
-            { id: "vec-b", placeholder: "3, 4", type: "text", label: "Vector B (x, y)" }
-        ],
-        build: () => {
-            const a = document.getElementById("field-vec-a").value.split(",").map(n => parseFloat(n.trim()));
-            const b = document.getElementById("field-vec-b").value.split(",").map(n => parseFloat(n.trim()));
-            return { a, b };
-        }
-    },
-    // CAP 6: http_latency
-    http_latency: {
-        fields: [{ id: "url", placeholder: "https://google.com", type: "text", label: "URL a medir" }],
-        build: () => ({ url: document.getElementById("field-url").value.trim() })
-    }
-};
-
 async function loadWorkers() {
     refreshWorkersBtn.disabled = true;
     refreshWorkersBtn.innerText = "Cargando...";
@@ -175,7 +116,8 @@ async function loadWorkers() {
 
         workerSelect.innerHTML = `<option value="">— Selecciona un worker (${workersData.length}) —</option>`;
         workersData.forEach(w => {
-            const caps = w.capabilities.length ? w.capabilities.join(", ") : "sin caps";
+            // Manejar compatibilidad si el compañero usa strings o la nueva estructura con objetos
+            const caps = w.capabilities.length ? w.capabilities.map(c => typeof c === 'string' ? c : c.name).join(", ") : "sin caps";
             const loadPct = Math.round(w.load * 100);
             workerSelect.innerHTML += `<option value="${escapeHtml(w.name)}">${escapeHtml(w.name)} (${caps}) [${loadPct}%]</option>`;
         });
@@ -204,33 +146,104 @@ function onWorkerChange() {
 
     capabilitySelect.innerHTML = `<option value="">— Selecciona capacidad —</option>`;
     worker.capabilities.forEach(cap => {
-        capabilitySelect.innerHTML += `<option value="${escapeHtml(cap)}">${escapeHtml(cap)}</option>`;
+        const capName = typeof cap === 'string' ? cap : cap.name;
+        capabilitySelect.innerHTML += `<option value="${escapeHtml(capName)}">${escapeHtml(capName)}</option>`;
     });
 
     payloadArea.style.display = "none";
     sendTaskBtn.disabled = true;
 }
 
-function onCapabilityChange() {
-    const cap = capabilitySelect.value;
-    const template = PAYLOAD_TEMPLATES[cap];
+const PAYLOAD_TEMPLATES = {
+    math_compute: {
+        fields: [
+            { id: "operation", type: "select", label: "Operación", options: ["add", "sub", "mul", "div"] },
+            { id: "a", placeholder: "10", type: "number", label: "A" },
+            { id: "b", placeholder: "5", type: "number", label: "B" }
+        ]
+    },
+    http_fetch: {
+        fields: [{ id: "url", placeholder: "https://jsonplaceholder.typicode.com/posts/1", type: "text", label: "URL" }]
+    },
+    search_text: {
+        fields: [
+            { id: "text", placeholder: "hola mundo hola", type: "text", label: "Texto" },
+            { id: "query", placeholder: "hola", type: "text", label: "Búsqueda (query)" }
+        ]
+    },
+    stats_compute: {
+        fields: [{ id: "numbers", placeholder: "1, 2, 3, 4, 5", type: "text", label: "Números (separados por coma)" }]
+    },
+    vector_distance: {
+        fields: [
+            { id: "a", placeholder: "0, 0", type: "text", label: "Vector A (x, y)" },
+            { id: "b", placeholder: "3, 4", type: "text", label: "Vector B (x, y)" }
+        ]
+    },
+    http_latency: {
+        fields: [{ id: "url", placeholder: "https://google.com", type: "text", label: "URL a medir" }]
+    },
+    sort_numbers: {
+        fields: [{ id: "numbers", placeholder: "9, 2, 5, 1, 7", type: "text", label: "Números (separados por coma)" }]
+    }
+};
 
-    if (!template) {
-        // Capacidad desconocida: campo JSON genérico
-        payloadArea.style.display = "block";
-        payloadArea.innerHTML = `
-            <label>Payload (JSON)</label>
-            <textarea id="field-raw-json" rows="3" placeholder='{"key": "value"}'></textarea>
-        `;
-        sendTaskBtn.disabled = false;
+function onCapabilityChange() {
+    const capName = capabilitySelect.value;
+    const workerName = workerSelect.value;
+    
+    if (!capName || !workerName) {
+        payloadArea.style.display = "none";
+        sendTaskBtn.disabled = true;
         return;
     }
 
+    const worker = workersData.find(w => w.name === workerName);
+    const capability = worker.capabilities.find(c => {
+        const cName = typeof c === 'string' ? c : c.name;
+        return cName === capName;
+    });
+
+    if (!capability) return;
     payloadArea.style.display = "block";
-    payloadArea.innerHTML = template.fields.map(f => `
-        <label>${escapeHtml(f.label || template.label)}</label>
-        <input id="field-${f.id}" type="${f.type}" placeholder="${escapeHtml(f.placeholder)}" />
-    `).join("");
+    
+    const template = PAYLOAD_TEMPLATES[capName];
+
+    // Soporte para el nuevo estandar de la clase (worker.schemas) y retrocompatibilidad
+    const newSchemaObj = (worker.schemas && worker.schemas[capName]) ? worker.schemas[capName] : {};
+    const dynamicSchema = newSchemaObj.payload || newSchemaObj.schema || (typeof capability === 'object' ? (capability.schema || capability.payload) : null);
+
+    if (template) {
+        // Tarea estándar conocida: pintar formulario bonito
+        payloadArea.innerHTML = template.fields.map(f => {
+            if (f.type === "select") {
+                const options = f.options.map(o => `<option value="${o}">${o}</option>`).join("");
+                return `
+                    <label>${escapeHtml(f.label)}</label>
+                    <select class="dynamic-field known-field" data-key="${escapeHtml(f.id)}">
+                        ${options}
+                    </select>
+                `;
+            } else {
+                return `
+                    <label>${escapeHtml(f.label)}</label>
+                    <input class="dynamic-field known-field" data-key="${escapeHtml(f.id)}" type="${escapeHtml(f.type)}" placeholder="${escapeHtml(f.placeholder)}" />
+                `;
+            }
+        }).join("");
+    } else if (dynamicSchema && Object.keys(dynamicSchema).length > 0) {
+            // Tarea desconocida pero con esquema dinámico provisto por el worker
+            payloadArea.innerHTML = Object.entries(dynamicSchema).map(([key, desc]) => `
+                <label>${escapeHtml(key)} <small style="color:#888; font-weight:normal;">(${escapeHtml(desc)})</small></label>
+                <input class="dynamic-field unknown-field" data-key="${escapeHtml(key)}" type="text" placeholder="Ingresa ${escapeHtml(key)}" />
+            `).join("");
+        } else {
+            // Tarea totalmente desconocida y sin esquema (Fallback a JSON)
+            payloadArea.innerHTML = `
+                <label>Payload (JSON PARA '${escapeHtml(capName.toUpperCase())}')</label>
+                <textarea id="field-raw-json" rows="4">{\n  "key": "value"\n}</textarea>
+            `;
+        }
 
     sendTaskBtn.disabled = false;
 }
@@ -241,19 +254,44 @@ async function sendTask() {
 
     if (!workerName || !type) return;
 
+    let payload = {};
     const template = PAYLOAD_TEMPLATES[type];
-    let payload;
 
     if (template) {
-        payload = template.build();
+        // Recolectar datos del formulario bonito
+        const fields = document.querySelectorAll(".known-field");
+        fields.forEach(f => {
+            const key = f.dataset.key;
+            let val = f.value.trim();
+            if (val === "" && f.placeholder) val = f.placeholder;
+
+            if (type === "math_compute" && (key === "a" || key === "b")) {
+                payload[key] = parseFloat(val);
+            } else if (type === "stats_compute" || type === "sort_numbers") {
+                payload[key] = val.split(",").map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
+            } else if (type === "vector_distance") {
+                payload[key] = val.split(",").map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
+            } else {
+                payload[key] = val;
+            }
+        });
     } else {
-        // Intentar parsear JSON genérico
-        const raw = document.getElementById("field-raw-json");
-        try {
-            payload = raw ? JSON.parse(raw.value || "{}") : {};
-        } catch {
-            alert("JSON inválido en el payload");
-            return;
+        // Recolectar datos dinámicos o JSON
+        const unknownFields = document.querySelectorAll(".unknown-field");
+        if (unknownFields.length > 0) {
+            unknownFields.forEach(field => {
+                const key = field.dataset.key;
+                let value = field.value.trim();
+                try { payload[key] = JSON.parse(value); } catch { payload[key] = value; }
+            });
+        } else {
+            const raw = document.getElementById("field-raw-json");
+            try {
+                payload = raw ? JSON.parse(raw.value || "{}") : {};
+            } catch {
+                alert("JSON inválido en el payload");
+                return;
+            }
         }
     }
 

@@ -7,15 +7,14 @@ const messageService = require("./services/message.service");
 const journal = require("./services/journal.service");
 const taskService = require("./services/task.service");
 
-const PORT = process.argv[2];
-const NAME = process.argv[3];
+const PORT = process.env.PORT || process.argv[2];
+const NAME = process.env.WORKER_NAME || process.argv[3];
+let parent = process.env.COORDINATOR_URL || process.argv[4];
 
 if (!PORT || !NAME) {
     console.error("PORT and NAME required");
     process.exit(1);
 }
-
-let parent = process.argv[4];
 
 const PUBLIC_URL = (process.env.WORKER_PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
 const PULSE_INTERVAL = Number(process.env.PULSE_INTERVAL || 3000);
@@ -354,10 +353,21 @@ app.post("/shutdown", (req, res) => {
 // GET /task/capabilities
 // El coordinador (y cualquiera) puede consultar qué sabe hacer este worker.
 app.get("/task/capabilities", (req, res) => {
+    const schemas = {};
+    taskService.CAPABILITIES_LIST.forEach(cap => {
+        schemas[cap.name] = {
+            description: cap.description,
+            payload: cap.payload,
+            expectedResult: cap.expectedResult || {} 
+        };
+    });
+
     res.json({
+        worker: NAME,
         name: NAME,
         publicUrl: PUBLIC_URL,
         capabilities: taskService.CAPABILITIES,
+        schemas: schemas,
         load: taskService.load(),
         taskLagMs: taskService.LAG_MS
     });
