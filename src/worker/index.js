@@ -5,7 +5,6 @@ const createLogger = require("./utils/logger");
 const pulse = require("./services/pulse.service");
 const messageService = require("./services/message.service");
 const journal = require("./services/journal.service");
-const taskService = require("./services/task.service");
 
 const PORT = process.argv[2];
 const NAME = process.argv[3];
@@ -258,11 +257,6 @@ app.get("/status", (req, res) => {
         lastPulseAt,
         sincePulse: lastPulseAt ? Date.now() - lastPulseAt : null,
         pulseInterval: PULSE_INTERVAL,
-        load: taskService.load(),
-        capabilities: taskService.CAPABILITIES,
-        taskLagMs: taskService.LAG_MS,
-        activeTasks: taskService.activeList(),
-        completedTasks: taskService.completedList(),
         coordinators: journal.list(),
         journal: journal.history()
     });
@@ -347,81 +341,4 @@ app.post("/shutdown", (req, res) => {
     setTimeout(() => {
         process.exit(0);
     }, 500);
-});
-
-/* ----------------------------------------------------------------- tareas -- */
-
-// GET /task/capabilities
-// El coordinador (y cualquiera) puede consultar qué sabe hacer este worker.
-app.get("/task/capabilities", (req, res) => {
-    res.json({
-        name: NAME,
-        publicUrl: PUBLIC_URL,
-        capabilities: taskService.CAPABILITIES,
-        load: taskService.load(),
-        taskLagMs: taskService.LAG_MS
-    });
-});
-
-// POST /task/assign
-// El coordinador llama a este endpoint para asignarle una tarea al worker.
-// Responde 202 Accepted de inmediato (la tarea corre en background) y cuando
-// termina le manda el resultado al coordinador via POST /task/receive.
-app.post("/task/assign", async (req, res) => {
-    const { taskId, type, payload } = req.body || {};
-
-    if (!taskId || !type) {
-        return res.status(400).json({ error: "taskId y type son requeridos" });
-    }
-
-    if (!taskService.CAPABILITIES.includes(type)) {
-        return res.status(422).json({
-            error: `Este worker no soporta la capacidad: ${type}`,
-            capabilities: taskService.CAPABILITIES
-        });
-    }
-
-    // Aceptar la tarea y empezar a ejecutarla sin bloquear la respuesta HTTP.
-    res.status(202).json({ taskId, status: "accepted" });
-
-    journal.write("tarea", `Tarea asignada: ${taskId} (${type})`);
-
-    // Ejecutar la tarea (con el lag configurado) y devolver el resultado al coordinador.
-    taskService.runTask({ taskId, type, payload, log })
-        .then(async entry => {
-            const resultBody = {
-                type: "task-result",
-                data: {
-                    taskId: entry.taskId,
-                    status: entry.status,
-                    ...(entry.status === "ok"
-                        ? { result: entry.result }
-                        : { error: entry.error })
-                }
-            };
-
-            journal.write(
-                "tarea",
-                `Tarea ${entry.taskId} terminada → ${entry.status} (${entry.duration}ms)`
-            );
-
-            if (!parent) {
-                log("WARN", `Tarea ${taskId} terminada pero no hay coordinador al que reportar`);
-                return;
-            }
-
-            try {
-                await axios.post(
-                    `${parent}/task/receive`,
-                    resultBody,
-                    { timeout: 5000, headers: pulse.HEADERS }
-                );
-                log("INFO", `Resultado de ${taskId} entregado al coordinador`);
-            } catch (err) {
-                log("ERROR", `No pude entregar el resultado de ${taskId}: ${err.message}`);
-            }
-        })
-        .catch(err => {
-            log("ERROR", `Error inesperado procesando tarea ${taskId}: ${err.message}`);
-        });
 });

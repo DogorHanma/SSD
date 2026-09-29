@@ -1,126 +1,31 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Coordinador · Panel</title>
+    <title>Coordinator Panel</title>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <!-- ===== HEADER ===== -->
-    <header class="header">
-        <div class="header-left">
-            <h1 id="nodeId">Coordinador</h1>
-            <span id="nodeUrl" class="node-url"></span>
+    <div class="container">
+        <h1>Mini Server Orchestrator</h1>
+
+        <div class="create-box">
+            <input id="nameInput" placeholder="Server name" />
+            <button id="createBtn">Create</button>
         </div>
-        <div id="leaderBanner" class="leader-banner">Conectando...</div>
-        <div class="header-right">
-            <span id="roleBadge" class="role-badge">—</span>
+
+        <div style="margin-top: 15px; text-align: center;">
+            <a href="election.html" style="color: var(--primary); text-decoration: none; font-weight: 500;">➔ Ir al Panel de Elección de Líder</a>
         </div>
-    </header>
 
-    <div class="layout">
+        <div class="list-head">
+            <h2>Active Servers</h2>
+            <div class="list-actions">
+                <span id="lastUpdate"></span>
+                <button id="reloadBtn">Reload</button>
+            </div>
+        </div>
 
-        <!-- ===== COLUMNA IZQUIERDA ===== -->
-        <aside class="sidebar">
-
-            <!-- Info del líder actual -->
-            <section class="card">
-                <h2>Líder actual</h2>
-                <div id="leaderCard" class="leader-card">
-                    <p class="empty-state">Sin líder conocido</p>
-                </div>
-            </section>
-
-            <!-- Conectar a otro coordinador -->
-            <section class="card">
-                <h2>Conectar coordinador</h2>
-                <p class="hint">Envía un <code>hello</code> a la URL del coordinador de tu compañero.</p>
-                <div class="input-row">
-                    <input id="connectUrl" type="text" placeholder="https://xxx.ngrok-free.app" />
-                    <button id="connectBtn" class="btn btn-primary">Conectar</button>
-                </div>
-                <p id="connectStatus" class="status-hint"></p>
-            </section>
-
-            <!-- Lista de coordinadores conocidos -->
-            <section class="card">
-                <h2>Coordinadores conocidos</h2>
-                <ul id="peerList" class="peer-list">
-                    <li class="empty-state">Ninguno todavía</li>
-                </ul>
-            </section>
-
-            <!-- Crear / registrar worker -->
-            <section class="card">
-                <h2>Crear worker</h2>
-                <p class="hint">Lanza un nuevo worker localmente.</p>
-                <div class="input-row">
-                    <input id="workerName" type="text" placeholder="worker-nombre-codigo" />
-                    <button id="createWorkerBtn" class="btn btn-secondary">Crear</button>
-                </div>
-                <p id="workerCreateStatus" class="status-hint"></p>
-            </section>
-
-            <!-- Lista de workers -->
-            <section class="card">
-                <h2>Workers registrados</h2>
-                <ul id="workerList" class="worker-list">
-                    <li class="empty-state">Ninguno todavía</li>
-                </ul>
-            </section>
-
-        </aside>
-
-        <!-- ===== CONTENIDO CENTRAL ===== -->
-        <main class="main-content">
-
-            <!-- Asignar tarea -->
-            <section class="card task-card">
-                <h2>Asignar tarea</h2>
-                <p class="hint">Solo el líder puede asignar tareas. El coordinador selecciona al worker con menor carga que tenga la capacidad requerida.</p>
-                <div class="task-form">
-                    <select id="taskType">
-                        <option value="stats_compute">stats_compute — promedio/min/max de números</option>
-                        <option value="http_fetch">http_fetch — fetch a una URL</option>
-                        <option value="sort_numbers">sort_numbers — ordenar lista de números</option>
-                    </select>
-                    <textarea id="taskPayload" rows="3" placeholder='{"numbers": [5, 3, 8, 1, 9]}'></textarea>
-                    <button id="assignTaskBtn" class="btn btn-primary">Asignar tarea</button>
-                </div>
-                <p id="taskStatus" class="status-hint"></p>
-            </section>
-
-            <!-- Resultados de tareas -->
-            <section class="card">
-                <h2>Historial de tareas</h2>
-                <ul id="taskResults" class="task-result-list">
-                    <li class="empty-state">Sin tareas aún</li>
-                </ul>
-            </section>
-
-            <!-- Log de comunicacion entre coordinadores -->
-            <section class="card">
-                <h2>Comunicación entre coordinadores</h2>
-                <p class="hint">Mensajes <code>hello · welcome · ping · pong · leader-announce</code> enviados y recibidos.</p>
-                <ul id="commLog" class="comm-log"></ul>
-            </section>
-
-        </main>
-
-        <!-- ===== COLUMNA DERECHA: eventos del motor Bully ===== -->
-        <aside class="feed-col">
-            <section class="card feed-card">
-                <div class="feed-header">
-                    <h2>Eventos internos</h2>
-                    <label class="toggle-label">
-                        <input type="checkbox" id="autoscroll" checked /> seguir
-                    </label>
-                </div>
-                <ul id="events" class="event-feed"></ul>
-            </section>
-        </aside>
-
+        <ul id="serverList"></ul>
     </div>
 
     <script src="app.js"></script>

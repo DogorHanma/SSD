@@ -1,27 +1,22 @@
-const nameEl       = document.getElementById("serverName");
-const portEl       = document.getElementById("serverPort");
-const button       = document.getElementById("shutdownBtn");
+const nameEl = document.getElementById("serverName");
+const portEl = document.getElementById("serverPort");
+const button = document.getElementById("shutdownBtn");
 
-const statusCard   = document.getElementById("statusCard");
-const statusDot    = document.getElementById("statusDot");
-const statusText   = document.getElementById("statusText");
-const currentParent= document.getElementById("currentParent");
-const pulseInfo    = document.getElementById("pulseInfo");
-const coordList    = document.getElementById("coordList");
-const journalEl    = document.getElementById("journal");
+const statusCard = document.getElementById("statusCard");
+const statusDot = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
+const currentParent = document.getElementById("currentParent");
+const pulseInfo = document.getElementById("pulseInfo");
+const coordList = document.getElementById("coordList");
+const journalEl = document.getElementById("journal");
 
-const parentInput  = document.getElementById("parentInput");
-const parentBtn    = document.getElementById("parentBtn");
+const parentInput = document.getElementById("parentInput");
+const parentBtn = document.getElementById("parentBtn");
 const parentStatus = document.getElementById("parentStatus");
 
 const messageInput = document.getElementById("messageInput");
-const sendBtn      = document.getElementById("sendBtn");
-const statusEl     = document.getElementById("status");
-
-const loadBar      = document.getElementById("loadBar");
-const capList      = document.getElementById("capList");
-const activeTaskList    = document.getElementById("activeTaskList");
-const completedTaskList = document.getElementById("completedTaskList");
+const sendBtn = document.getElementById("sendBtn");
+const statusEl = document.getElementById("status");
 
 let lastSeq = 0;
 
@@ -38,14 +33,18 @@ function setHint(el, text, type) {
     el.className = `hint ${type || ""}`;
 }
 
+// Nombre corto para no llenar la pantalla de urls de ngrok.
 function shortUrl(url) {
     return String(url || "").replace(/^https?:\/\//, "").replace(/\/+$/, "");
 }
 
 /* ------------------------------------------------------------- estado -- */
 
+// Este fetch va a MI worker, en mi propia maquina: no pasa por ningun tunel
+// y por tanto no gasta cuota. Por eso puede refrescar cada segundo.
 async function loadStatus() {
     let data;
+
     try {
         const res = await fetch("/status");
         data = await res.json();
@@ -54,13 +53,10 @@ async function loadStatus() {
         return;
     }
 
-    nameEl.innerText = `Worker: ${data.name}`;
+    nameEl.innerText = `Mini Server: ${data.name}`;
     portEl.innerText = `Puerto ${data.port} · ${data.publicUrl}`;
 
     renderStatus(data);
-    renderCapabilities(data);
-    renderActiveTasks(data);
-    renderCompletedTasks(data);
     renderCoordinators(data);
     renderJournal(data);
 }
@@ -77,7 +73,7 @@ function renderStatus(data) {
     const estado = ESTADOS[data.status] || ESTADOS.arrancando;
 
     statusCard.className = `status-card ${estado.clase}`;
-    statusDot.className  = `dot ${estado.clase}`;
+    statusDot.className = `dot ${estado.clase}`;
     statusText.innerText = estado.texto;
 
     currentParent.innerText = shortUrl(data.parent) || "ninguno";
@@ -87,80 +83,14 @@ function renderStatus(data) {
         return;
     }
 
+    // Cuanto hace del ultimo pulso correcto. Si este numero empieza a crecer
+    // por encima del intervalo, es que el coordinador ya no contesta.
     const segundos = (data.sincePulse / 1000).toFixed(1);
-    const tarde    = data.sincePulse > data.pulseInterval * 2;
+    const tarde = data.sincePulse > data.pulseInterval * 2;
 
-    pulseInfo.className  = `status-pulse ${tarde ? "late" : ""}`;
-    pulseInfo.innerText  = `ultimo pulso hace ${segundos}s (cada ${data.pulseInterval / 1000}s)`;
+    pulseInfo.className = `status-pulse ${tarde ? "late" : ""}`;
+    pulseInfo.innerText = `ultimo pulso hace ${segundos}s (cada ${data.pulseInterval / 1000}s)`;
 }
-
-/* ----------------------------------------------------------- capacidades -- */
-
-function renderCapabilities(data) {
-    const caps  = data.capabilities || [];
-    const load  = data.load || 0;
-    const lagMs = data.taskLagMs || 0;
-
-    // Barra de carga
-    const pct = Math.round(load * 100);
-    loadBar.style.width = `${pct}%`;
-    loadBar.className   = `load-fill ${load > 0.7 ? "high" : load > 0.3 ? "mid" : "low"}`;
-    loadBar.title       = `Carga: ${pct}%`;
-
-    // Chips de capacidades
-    capList.innerHTML = caps.map(c =>
-        `<span class="cap-chip">${escapeHtml(c)}</span>`
-    ).join("") + (lagMs > 0 ? `<span class="cap-chip lag">lag: ${lagMs}ms</span>` : "");
-}
-
-/* -------------------------------------------------------------- tareas activas -- */
-
-function renderActiveTasks(data) {
-    const tasks = data.activeTasks || [];
-
-    if (!tasks.length) {
-        activeTaskList.innerHTML = `<li class="task-empty">Sin tareas activas</li>`;
-        return;
-    }
-
-    activeTaskList.innerHTML = tasks.map(t => {
-        const elapsed = ((Date.now() - t.startedAt) / 1000).toFixed(1);
-        return `<li class="task-item running">
-            <span class="task-badge running">corriendo</span>
-            <span class="task-id">${escapeHtml(t.taskId)}</span>
-            <span class="task-type">${escapeHtml(t.type)}</span>
-            <span class="task-time">${elapsed}s</span>
-        </li>`;
-    }).join("");
-}
-
-/* --------------------------------------------------------- historial de tareas -- */
-
-function renderCompletedTasks(data) {
-    const tasks = (data.completedTasks || []).slice(0, 20);
-
-    if (!tasks.length) {
-        completedTaskList.innerHTML = `<li class="task-empty">Sin historial todavía</li>`;
-        return;
-    }
-
-    completedTaskList.innerHTML = tasks.map(t => {
-        const dur = t.duration ? `${t.duration}ms` : "";
-        const ok  = t.status === "ok";
-        const preview = ok
-            ? escapeHtml(JSON.stringify(t.result).slice(0, 60))
-            : escapeHtml(String(t.error || "").slice(0, 60));
-
-        return `<li class="task-item ${ok ? "ok" : "err"}">
-            <span class="task-badge ${ok ? "ok" : "err"}">${ok ? "ok" : "error"}</span>
-            <span class="task-type">${escapeHtml(t.type)}</span>
-            <span class="task-result">${preview}</span>
-            ${dur ? `<span class="task-time">${dur}</span>` : ""}
-        </li>`;
-    }).join("");
-}
-
-/* ------------------------------------------------------------ coordinadores -- */
 
 const ROLES = {
     leader:   { etiqueta: "LIDER",       clase: "leader" },
@@ -176,47 +106,54 @@ function renderCoordinators(data) {
         return;
     }
 
-    coordList.innerHTML = coordinators.map(coordinator => {
-        const rol    = ROLES[coordinator.role] || { etiqueta: "no se", clase: "unknown" };
-        const actual = coordinator.url === data.parent;
+    coordList.innerHTML = coordinators
+        .map(coordinator => {
+            const rol = ROLES[coordinator.role] || { etiqueta: "no se", clase: "unknown" };
+            const actual = coordinator.url === data.parent;
 
-        return `
-            <li class="${actual ? "current" : ""}">
-                <span class="badge ${rol.clase}">${rol.etiqueta}</span>
-                <span class="url">${escapeHtml(coordinator.id || shortUrl(coordinator.url))}</span>
-                ${coordinator.id ? `<span class="host">${escapeHtml(shortUrl(coordinator.url))}</span>` : ""}
-                ${actual ? '<span class="mine">el mio</span>' : ""}
-                ${coordinator.note ? `<span class="note">${escapeHtml(coordinator.note)}</span>` : ""}
-            </li>`;
-    }).join("");
+            return `
+                <li class="${actual ? "current" : ""}">
+                    <span class="badge ${rol.clase}">${rol.etiqueta}</span>
+                    <span class="url">${escapeHtml(coordinator.id || shortUrl(coordinator.url))}</span>
+                    ${coordinator.id ? `<span class="host">${escapeHtml(shortUrl(coordinator.url))}</span>` : ""}
+                    ${actual ? '<span class="mine">el mio</span>' : ""}
+                    ${coordinator.note ? `<span class="note">${escapeHtml(coordinator.note)}</span>` : ""}
+                </li>`;
+        })
+        .join("");
 }
 
-/* --------------------------------------------------------------- diario -- */
-
-const RESALTADOS = ["registro", "caida", "busqueda", "redirect", "tarea"];
+const RESALTADOS = ["registro", "caida", "busqueda", "redirect"];
 
 function lineaDiario(entry) {
     const veces = entry.repeated > 1 ? ` <em class="repeated">x${entry.repeated}</em>` : "";
+
     return `<time>${new Date(entry.at).toLocaleTimeString()}</time>` +
            `<span>${escapeHtml(entry.text)}${veces}</span>`;
 }
 
 function renderJournal(data) {
     const entries = data.journal || [];
-    const ultima  = entries[entries.length - 1];
+
+    // Mientras hay eleccion, la ultima linea se repite y solo cambia su
+    // contador. Se reescribe en su sitio en vez de anadir una nueva.
+    const ultima = entries[entries.length - 1];
 
     if (ultima && ultima.seq === lastSeq && journalEl.lastChild) {
         journalEl.lastChild.innerHTML = lineaDiario(ultima);
     }
 
+    // Solo pinto lo nuevo, para que no parpadee ni se pierda el scroll.
     entries
         .filter(entry => entry.seq > lastSeq)
         .forEach(entry => {
             lastSeq = entry.seq;
 
             const li = document.createElement("li");
+
             li.className = RESALTADOS.includes(entry.kind) ? `entry ${entry.kind}` : "entry";
             li.innerHTML = lineaDiario(entry);
+
             journalEl.appendChild(li);
         });
 
@@ -234,11 +171,12 @@ async function switchParent() {
     setHint(parentStatus, "Registrando...");
 
     try {
-        const res  = await fetch("/parent", {
+        const res = await fetch("/parent", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url })
         });
+
         const data = await res.json();
 
         if (res.ok) {
@@ -246,6 +184,7 @@ async function switchParent() {
         } else {
             setHint(parentStatus, data.error || `Error ${res.status}`, "error");
         }
+
     } catch {
         setHint(parentStatus, "Este mini server no responde", "error");
     }
@@ -274,6 +213,7 @@ async function sendMessage() {
             const err = await res.json();
             setHint(statusEl, err.error || `Error ${res.status}`, "error");
         }
+
     } catch {
         setHint(statusEl, "Este mini server no responde", "error");
     }
@@ -295,6 +235,7 @@ messageInput.addEventListener("keydown", event => {
 button.addEventListener("click", async () => {
     button.disabled = true;
     button.innerText = "Shutting down...";
+
     await fetch("/shutdown", { method: "POST" });
 });
 

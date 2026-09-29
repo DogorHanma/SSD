@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Worker · G9</title>
+    <title>Mini Server</title>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -11,7 +11,7 @@
         <h1 id="serverName"></h1>
         <p id="serverPort" class="subtitle"></p>
 
-        <!-- Estado de conexión con el coordinador -->
+        <!-- Lo primero que se mira cuando muere el coordinador. -->
         <div id="statusCard" class="status-card">
             <div class="status-line">
                 <span id="statusDot" class="dot"></span>
@@ -23,43 +23,19 @@
             <div id="pulseInfo" class="status-pulse"></div>
         </div>
 
-        <!-- Capacidades y carga -->
-        <div class="field">
-            <label>Capacidades · Carga actual</label>
-            <div id="capabilitiesBar" class="caps-bar">
-                <div id="loadBar" class="load-fill" style="width:0%"></div>
-            </div>
-            <div id="capList" class="cap-list"></div>
-        </div>
-
-        <!-- Tareas activas -->
-        <div class="field">
-            <label>Tareas activas</label>
-            <ul id="activeTaskList" class="task-list"></ul>
-        </div>
-
-        <!-- Historial de tareas -->
-        <div class="field">
-            <label>Historial de tareas (últimas 20)</label>
-            <ul id="completedTaskList" class="task-list"></ul>
-        </div>
-
-        <!-- Coordinadores conocidos -->
         <div class="field">
             <label>Coordinadores que conozco</label>
             <p class="hint">No los tengo configurados: me los va contando mi coordinador en cada pulso.</p>
             <ul id="coordList" class="coord-list"></ul>
         </div>
 
-        <!-- Diario de eventos -->
         <div class="field">
             <label>Que estoy haciendo</label>
             <ul id="journal" class="journal"></ul>
         </div>
 
-        <!-- Enviar mensaje al coordinador -->
         <div class="field">
-            <label for="messageInput">Mensaje al coordinador</label>
+            <label for="messageInput">Mensaje</label>
             <div class="row">
                 <input id="messageInput" placeholder="Escribe un mensaje" />
                 <button id="sendBtn">Send</button>
