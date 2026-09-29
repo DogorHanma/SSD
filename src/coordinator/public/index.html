@@ -26,6 +26,46 @@
         </div>
 
         <ul id="serverList"></ul>
+
+        <!-- ==================== TASK PANEL ==================== -->
+        <div class="task-panel">
+            <div class="task-panel-header">
+                <h2>⚡ Task Assignment</h2>
+                <button id="refreshWorkersBtn" class="btn-ghost">Refresh Workers</button>
+            </div>
+
+            <!-- Worker selector -->
+            <div class="task-form">
+                <div class="task-form-row">
+                    <label>Worker</label>
+                    <select id="workerSelect">
+                        <option value="">— Cargando workers —</option>
+                    </select>
+                </div>
+
+                <div class="task-form-row">
+                    <label>Capability</label>
+                    <select id="capabilitySelect">
+                        <option value="">— Selecciona un worker —</option>
+                    </select>
+                </div>
+
+                <!-- Payload dinámico -->
+                <div id="payloadArea" class="task-form-payload" style="display:none;"></div>
+
+                <button id="sendTaskBtn" class="btn-task" disabled>Enviar Tarea</button>
+            </div>
+
+            <!-- Historial -->
+            <div class="task-history-head">
+                <h3>Historial de Tareas</h3>
+                <button id="refreshTasksBtn" class="btn-ghost">Actualizar</button>
+            </div>
+
+            <div id="taskList" class="task-list">
+                <p class="empty-hint">No hay tareas aún.</p>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>

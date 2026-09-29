@@ -4,11 +4,12 @@ const config = require("./config");
 const routes = require("./routes/server.routes");
 const electionRoutes = require("./routes/election.routes");
 const debugRoutes = require("./routes/debug.routes");
+const taskRoutes = require("./routes/task.routes");
 
 const app = express();
 
 app.set("trust proxy", config.trustProxy);
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 // El protocolo de eleccion va antes que las rutas del coordinador: 
@@ -19,5 +20,6 @@ if (config.electionEnabled) {
 }
 
 app.use("/", routes);
+app.use("/", taskRoutes);
 
 module.exports = app;

@@ -16,13 +16,11 @@ const PRESETS = {
         rpcTimeout: 1000
     },
 
-    // Por defecto para trabajar entre laptops. Failover en ~5-8 segundos:
-    // suficientemente rapido para que se vea en clase, suficientemente lento
-    // para no reventar la cuota del tunel ni provocar falsas caidas.
+    // Tiempos del examen: ping interval 2s, ping timeout 5s, 3 retries.
     classroom: {
         tick: 500,
         heartbeat: 2000,
-        suspect: 7000,
+        suspect: 5000,
         electionMin: 4000,
         electionMax: 9000,
         rpcTimeout: 4000

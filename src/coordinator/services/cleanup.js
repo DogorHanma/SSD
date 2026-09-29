@@ -5,7 +5,7 @@ const processManager = require("./processManager");
 function startCleanup() {
     setInterval(() => {
         const now = Date.now();
-        const timeout = 15000;
+        const timeout = 8000;  // Pulse timeout: 8s (examen)
 
         const servers = registry.getRaw();
 
