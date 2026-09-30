@@ -268,9 +268,9 @@ async function sendTask() {
             if (type === "math_compute" && (key === "a" || key === "b")) {
                 payload[key] = parseFloat(val);
             } else if (type === "stats_compute" || type === "sort_numbers") {
-                payload[key] = val.split(",").map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
+                payload[key] = val.replace(/[\[\]]/g, '').split(",").map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
             } else if (type === "vector_distance") {
-                payload[key] = val.split(",").map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
+                payload[key] = val.replace(/[\[\]]/g, '').split(",").map(n => parseFloat(n.trim())).filter(n => !isNaN(n));
             } else {
                 payload[key] = val;
             }
