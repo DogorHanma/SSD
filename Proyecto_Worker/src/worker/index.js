@@ -354,12 +354,23 @@ app.post("/shutdown", (req, res) => {
 // El coordinador (y cualquiera) puede consultar qué sabe hacer este worker.
 app.get("/task/capabilities", (req, res) => {
     const schemas = {};
+    const details = [];
+    
     taskService.CAPABILITIES_LIST.forEach(cap => {
         schemas[cap.name] = {
             description: cap.description,
             payload: cap.payload,
             expectedResult: cap.expectedResult || {} 
         };
+        
+        details.push({
+            type: cap.name,
+            name: cap.name,
+            description: cap.description,
+            payload: cap.payload,
+            samplePayload: cap.payload,
+            result: cap.expectedResult || {}
+        });
     });
 
     res.json({
@@ -369,7 +380,15 @@ app.get("/task/capabilities", (req, res) => {
         capabilities: taskService.CAPABILITIES,
         schemas: schemas,
         load: taskService.load(),
-        taskLagMs: taskService.LAG_MS
+        taskLagMs: taskService.LAG_MS,
+        
+        // Campos añadidos para compatibilidad con el nuevo formato requerido
+        running: taskService.activeList().length,
+        lagMs: taskService.LAG_MS,
+        tasks: taskService.CAPABILITIES,
+        types: taskService.CAPABILITIES,
+        supported: taskService.CAPABILITIES,
+        details: details
     });
 });
 
@@ -378,26 +397,39 @@ app.get("/task/capabilities", (req, res) => {
 // Responde 202 Accepted de inmediato (la tarea corre en background) y cuando
 // termina le manda el resultado al coordinador via POST /task/receive.
 app.post("/task/assign", async (req, res) => {
-    const { taskId, type, payload } = req.body || {};
+    // Soporta tanto el formato oficial del parcial { type: "task-assign", data: { ... } }
+    // como el formato plano { taskId, type, payload }
+    const source = (req.body?.type === "task-assign" && req.body?.data) ? req.body.data : (req.body || {});
+    const { taskId, type, payload } = source;
 
-    if (!taskId || !type) {
-        return res.status(400).json({ error: "taskId y type son requeridos" });
+    if (!type) {
+        return res.status(400).json({ error: "El tipo de tarea (type) es requerido" });
     }
 
     if (!taskService.CAPABILITIES.includes(type)) {
-        return res.status(422).json({
-            error: `Este worker no soporta la capacidad: ${type}`,
-            capabilities: taskService.CAPABILITIES
+        return res.status(400).json({
+            error: `Tipo de tarea no soportado: '${type}'`,
+            supported: taskService.CAPABILITIES
         });
     }
 
-    // Aceptar la tarea y empezar a ejecutarla sin bloquear la respuesta HTTP.
-    res.status(202).json({ taskId, status: "accepted" });
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return res.status(400).json({ error: "payload debe ser un objeto" });
+    }
 
-    journal.write("tarea", `Tarea asignada: ${taskId} (${type})`);
+    if (!parent) {
+        return res.status(409).json({ error: "El worker no está registrado en ningún Coordinator" });
+    }
+
+    const id = taskId || `task-${NAME}-${Date.now()}`;
+
+    // Aceptar la tarea y empezar a ejecutarla sin bloquear la respuesta HTTP.
+    res.status(202).json({ message: "Tarea aceptada", taskId: id, status: "accepted" });
+
+    journal.write("tarea", `Tarea asignada: ${id} (${type})`);
 
     // Ejecutar la tarea (con el lag configurado) y devolver el resultado al coordinador.
-    taskService.runTask({ taskId, type, payload, log })
+    taskService.runTask({ taskId: id, type, payload, log })
         .then(async entry => {
             const resultBody = {
                 type: "task-result",
@@ -416,7 +448,7 @@ app.post("/task/assign", async (req, res) => {
             );
 
             if (!parent) {
-                log("WARN", `Tarea ${taskId} terminada pero no hay coordinador al que reportar`);
+                log("WARN", `Tarea ${id} terminada pero no hay coordinador al que reportar`);
                 return;
             }
 
@@ -426,12 +458,12 @@ app.post("/task/assign", async (req, res) => {
                     resultBody,
                     { timeout: 5000, headers: pulse.HEADERS }
                 );
-                log("INFO", `Resultado de ${taskId} entregado al coordinador`);
+                log("INFO", `Resultado de ${id} entregado al coordinador`);
             } catch (err) {
-                log("ERROR", `No pude entregar el resultado de ${taskId}: ${err.message}`);
+                log("ERROR", `No pude entregar el resultado de ${id}: ${err.message}`);
             }
         })
         .catch(err => {
-            log("ERROR", `Error inesperado procesando tarea ${taskId}: ${err.message}`);
+            log("ERROR", `Error inesperado procesando tarea ${id}: ${err.message}`);
         });
 });

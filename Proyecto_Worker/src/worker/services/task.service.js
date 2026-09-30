@@ -16,6 +16,11 @@ const CAPABILITIES_LIST = [
         description: "Calcula promedio, mínimo y máximo de una lista de números.",
         payload: {
             numbers: [1, 2, 3, 4, 5]
+        },
+        expectedResult: {
+            mean: 3.0000,
+            min: 1,
+            max: 5
         }
     },
     {
@@ -23,6 +28,10 @@ const CAPABILITIES_LIST = [
         description: "Hace fetch a una URL y retorna el status.",
         payload: {
             url: "https://www.google.com"
+        },
+        expectedResult: {
+            status: 200,
+            ms: 125
         }
     },
     {
@@ -30,6 +39,9 @@ const CAPABILITIES_LIST = [
         description: "Ordena una lista de números de menor a mayor.",
         payload: {
             numbers: [9, 2, 5, 1, 7]
+        },
+        expectedResult: {
+            sorted: [1, 2, 5, 7, 9]
         }
     }
 ];
